@@ -1,6 +1,7 @@
 import { Height } from '@mui/icons-material';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
+const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max)
 
 interface ImageCropComponentProps {
 image: string, //the image being cropped
@@ -16,47 +17,70 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
     
     const [width, setWidth] = useState(300);
     const [height, setHeight] = useState(300);
+    const [maxHeight, setMaxHeight] = useState(300);
+    const [clickOffset, setClickOffset] = useState(0)
     const [verticleAdjustment, setVerticleAdjustment] = useState(false);
-    const [HorizontalAdjustment, setHorizontalAdjustment] = useState(false);
-
-    const dragGrip = useRef<HTMLDivElement>(null);
+    const [widthOnClick, setWidthOnClick] = useState(300);
     
-    const handleMouseDown = (e: any, direction: number) => {
-        if(direction === 0){
-            setHorizontalAdjustment(true);
-        }
-        if(direction === 1){
-            setVerticleAdjustment(true);
-        }
+    const ResizeDragBounds = useRef<HTMLDivElement>(null);
+
+    useEffect(() => { //sets the width of the crop window to 100% of the containing element
+        if(!ResizeDragBounds.current) return;
+
+        setWidth(ResizeDragBounds.current.offsetWidth);
+        setMaxHeight(ResizeDragBounds.current.offsetWidth);
+
+    }, [])
+    
+    const handleMouseDown = (e: any) => {
+        
+            const target = ResizeDragBounds.current;
+            const rect = target?.getBoundingClientRect();
+
+            if (rect) {
+                const initialOffsetY = (e.clientY - rect.top) - height;
+                setClickOffset(initialOffsetY)
+                setVerticleAdjustment(true);
+                setWidthOnClick(width);
+            }
+            
+            
+        
         e.preventDefault();
     }
 
     const handleMouseUp = () => {
         setVerticleAdjustment(false);
-        setHorizontalAdjustment(false);
+        
     }
 
     const handleMouseMove = (e: any) => {
-        const target = dragGrip.current;
-
-        const rect = target?.getBoundingClientRect();
         
         if(verticleAdjustment) {
+        
+            const target = ResizeDragBounds.current;
+            const rect = target?.getBoundingClientRect();
+        
+            if(rect){
             
-            const y = e.clientY - rect!.top;
+                const y = e.clientY - rect.top; // mouse position within resize dragging div
+                const yOffset = y - clickOffset;
+                
+                if(width === maxHeight) {
+                    setWidthOnClick(width);
+                setHeight(clamp(yOffset, 100, maxHeight));
+                }
 
-            if(y < target!.offsetHeight && 0 < target!.offsetHeight){
-            setHeight(y);
-            }
-        }
+                if(y > maxHeight || width < maxHeight) {
+                    setWidth(clamp((widthOnClick - ((yOffset - maxHeight))),100,maxHeight))
+                    
+                }
+                
 
-        if(HorizontalAdjustment) {
-            
-            const x = ((e.clientX - (rect!.left + (target!.offsetWidth/2)))*2);
-            
-            if(x < target!.offsetWidth && 0 < target!.offsetWidth){
-            setWidth(x);
+
+                
             }
+            
         }
 
     }
@@ -64,15 +88,13 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
 
     return (
         <div
-        
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
         style={{
             width: "100%",
-            height: "500px",
-           
+            height: "100%",
         }}
-        ref={dragGrip}
+        ref={ResizeDragBounds}
         >
             <div
             style={{
@@ -103,30 +125,14 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
                     >
                         {/* canvas element */}
                     </div>
-                    <div
-                    className={"bg-seam-gray text-seam-gray-subtitle cursor-row-resize"}
-                    onMouseDown={(event) => {handleMouseDown(event,0)}}
-                    style={{
-                        width: "40px",
-                        height: "auto",
-                        float: "left",
-                        marginLeft: "10px",
-                        writingMode: "vertical-rl",
-                        textOrientation: "mixed",
-                        textAlign: "center",
-                        userSelect: "none",
-                        padding: "5px",
-                        borderRadius: "5px",
-                        boxSizing: 'border-box',
-                    }}
-                    >
-                        Adjust Width
-                    </div>
                 </div>
                 
-                <div
+                
+                
+            </div>
+            <div
                 className={"bg-seam-gray text-seam-gray-subtitle cursor-row-resize"}
-                onMouseDown={(event) => {handleMouseDown(event,1)}}
+                onPointerDown={handleMouseDown}
                 style={{
                     width: "100%",
                     height: "auto",
@@ -142,10 +148,7 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
                 }}
                 >
                 Drag to adjust aspect ratio
-                </div>
-                
-            </div>
-                
+                </div>   
         </div>
 
 
