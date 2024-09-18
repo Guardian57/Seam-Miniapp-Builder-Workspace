@@ -13,10 +13,14 @@ const findDimension = (ratio: number, width?: number, height?: number) => {
     throw new Error("Either width or height must be provided");
 }
 
+const convertToDecimal = (numerator: number, denominator: number) => {
+    return numerator / denominator;
+  };
+
 interface ImageCropComponentProps {
 image: string, //the image being cropped
 isFixedAspectRatio: boolean, // does the miniapp have a fixed aspect ratio/ratios. if not, allow size adjustment
-AspectRatio: number[], // The fix aspect ratio(s) that the post can use. index 0 is default (note - isFixedAspectRatio can still be false - the size can be adjusted, but presets are avaiable in the menu)
+AspectRatio: [number, number][], // The fix aspect ratio(s) that the post can use. index 0 is default (note - isFixedAspectRatio can still be false - the size can be adjusted, but presets are avaiable in the menu)
 fillCropArea: boolean,
 maximumRatio: number,
 minimumRatio: number,
@@ -27,7 +31,19 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
     
     const [maxHeight, setMaxHeight] = useState(300);
     const [verticleAdjustment, setVerticleAdjustment] = useState(false);
+    const [selectedRatio, setSelectedRatio] = useState<number | null>(null); // the selected ratio preset. null if no current preset
     
+    const [decimals, setDecimals] = useState<number[]>(
+        AspectRatio.map(([numerator, denominator]) =>
+          convertToDecimal(numerator, denominator)
+        )
+      );
+
+      useEffect(() => {
+        setSelectedRatio(decimals[0]);
+
+      }, [decimals])
+
     const [resizeState, setResizeState] = useState({ 
         width: 300,
         height: 300,
@@ -91,9 +107,11 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
 
         setMaxHeight(ResizeDragBounds.current.offsetWidth); 
 
-        adjustDimensionsBasedOnRatio( AspectRatio[0], ResizeDragBounds.current.offsetWidth )
+        adjustDimensionsBasedOnRatio( AspectRatio[0][0]/AspectRatio[0][1], ResizeDragBounds.current.offsetWidth )
 
     }, [])
+
+    // Custom Aspect Ratio Functions
 
     useEffect(()=> { // Effect for handling action when threshold is crossed
         
@@ -106,8 +124,6 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
         }
 
     }, [resizeState.thresholdCrossed]);
-
-    // Custom Aspect Ratio Functions
 
     const handleThresholdCrossing = (yOffset: number, clickOffset: number) => {
         const {thresholdCrossed, width, height} = resizeState;
@@ -145,6 +161,7 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
 
     const handleMouseDown = (e: any) => {
         setVerticleAdjustment(true);
+        setSelectedRatio(null);
         setResizeState(prevState => ({
             ...prevState,
             widthOnClick: resizeState.width,
@@ -236,6 +253,12 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
             </div>   
     )
 
+    const handleRatioSelect = (ratio: number) => {
+        adjustDimensionsBasedOnRatio(ratio, maxHeight);
+        setSelectedRatio(ratio)
+        
+    }
+
     return (
         <div
         style={{
@@ -270,6 +293,33 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
             
             { isFixedAspectRatio ? null : dragButton }
             
+            <div
+            style={{
+                display: 'flex', 
+                flexDirection: "row", 
+                justifyContent: "space-evenly", 
+                padding: "5px", 
+                marginTop: "10px",
+            }}
+            >
+            {decimals.map((ratio,index) => (
+                <label 
+                key={ratio}
+                className={`select-none px-5 py-3 rounded-full ${AspectRatio.length === 1 || ratio === selectedRatio ? null :'hover:bg-seam-green hover:text-seam-black'} ${selectedRatio === ratio ? "bg-blue-500 text-white" : "text-gray-800"}`}
+                >
+                    <input 
+                    className={'opacity-0 fixed width-0'}
+                    type='radio'
+                    name="dynamic-radio"
+                    value={ratio}
+                    checked={selectedRatio === ratio}
+                    onChange={() => handleRatioSelect(ratio)}
+                    />
+                    {AspectRatio[index][0]} : {AspectRatio[index][1]}
+                </label>
+            ))}
+            </div>
+
         </div>
 
     )
