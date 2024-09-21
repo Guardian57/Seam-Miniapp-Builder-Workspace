@@ -1,6 +1,7 @@
 import { Height } from '@mui/icons-material';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import subwayTestImage from "../assets/Parallax/SubwayCar_02_Front.png";
+import SeamSaveButton from '../../components/SeamSaveButton';
 
 type Coordinate2D = [number, number];
 
@@ -34,12 +35,12 @@ imageString: string,
 CanvasWidth: number,
 //CanvasHeight: number,
 aspectRatio: number, // aspect ratio in array format. e.g. [16,9] 
-
+onCanvasReady: (canvas: HTMLCanvasElement) => void,
 
 
 }
 
-const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imageString, CanvasWidth, aspectRatio}) => {
+const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imageString, CanvasWidth, aspectRatio, onCanvasReady}) => {
 
     const canvasRef = useRef<HTMLCanvasElement>(null); // Main canvas element
     const [imageBeingEdited, setImageBeingEdited] = useState<HTMLImageElement | null>(null)
@@ -75,6 +76,10 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
         const [dx, dy, dw, dh] = [imageTransform.xPos, imageTransform.yPos, imageDims[0], imageDims[1]];
 
         cropCanvasContext.clearRect(0, 0, canvasDims[0], canvasDims[1])
+        
+        cropCanvasContext.fillStyle = "aliceblue"
+        cropCanvasContext.fillRect(0, 0, canvasDims[0], canvasDims[1])
+        
         cropCanvasContext.drawImage(imageBeingEdited, sx, sy, sw, sh, dx, dy, dw, dh);
         
     }, [imageBeingEdited, CanvasResizeState.height, imageTransform])
@@ -85,6 +90,12 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
         
         console.log(touchPos)
         setYOffset([touchPos[0] - imageTransform.xPos, touchPos[1] - imageTransform.yPos])
+        e.preventDefault()
+    }
+
+    const handleTouchEnd = () => {
+        if(!canvasRef.current) return;
+        onCanvasReady(canvasRef.current)
 
     }
 
@@ -106,10 +117,6 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
 
                 }))
                 
-                
-            
-            
-            
         }
 
     }
@@ -141,9 +148,10 @@ return (
     ref={canvasRef}
     width={`${CanvasResizeState.width}px`} 
     height={`${CanvasResizeState.height}px`} 
-    style={{width: "100%", height: "auto"}}
+    style={{width: "100%", height: "auto", touchAction: "none"}}
     onTouchMove={e => handleMove(e)}
     onTouchStart={handleTouchStart}
+    onTouchEnd={handleTouchEnd}
     ></canvas>
 
 
@@ -170,6 +178,8 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
     const [selectedRatio, setSelectedRatio] = useState<number | null>(null); // the selected ratio preset. null if no current preset
     
     const canvasRef = useRef<HTMLCanvasElement>(null); // Main canvas element
+    const [finalImage, setFinalImage] = useState<HTMLImageElement | null>(null)
+    const [finalCanvas, setFinalCanvas] = useState<HTMLCanvasElement | null>(null)
 
     const [decimals, setDecimals] = useState<number[]>(
         AspectRatio.map(([numerator, denominator]) =>
@@ -396,7 +406,8 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
                 padding: "5px",
                 marginTop: "10px",
                 boxSizing: "border-box",
-                borderRadius: "5px"
+                borderRadius: "5px",
+                touchAction: "none",
             }}
             >
             Drag to adjust aspect ratio
@@ -410,6 +421,17 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
         // setCanvasWidthHeight(canvasSize.width, canvasSize.height)
         
         setSelectedRatio(ratio)
+        
+    }
+
+    const handleCanvasReady = (canvas: HTMLCanvasElement) => {
+        setFinalCanvas(canvas)
+    }
+
+    const extractImage = (canvas: HTMLCanvasElement) => {
+        const img = new Image();
+        img.src = canvas.toDataURL('image/png')
+        setFinalImage(img)
         
     }
 
@@ -445,7 +467,7 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
                 >
                     {/* canvas element */}
                     
-                    <ImageCropCanvasComponent imageString={image} CanvasWidth={resizeState.canvasWidth} aspectRatio={resizeState.aspectRatio}></ImageCropCanvasComponent>
+                    <ImageCropCanvasComponent imageString={image} CanvasWidth={resizeState.canvasWidth} aspectRatio={resizeState.aspectRatio} onCanvasReady={handleCanvasReady}></ImageCropCanvasComponent>
                 </div>
             </div>
             
@@ -478,6 +500,9 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
             ))}
             </div>
 
+            <SeamSaveButton onClick={() => finalCanvas && extractImage(finalCanvas)}/>
+
+            <img style={{marginTop: "15px"}}src={finalImage?.src}/>
         </div>
 
     )
