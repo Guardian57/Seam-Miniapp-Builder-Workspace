@@ -1,5 +1,10 @@
 import { Height } from '@mui/icons-material';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import subwayTestImage from "../assets/Parallax/SubwayCar_02_Front.png";
+
+type Coordinate2D = [number, number];
+
+// Global Functions
 
 const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max)
 
@@ -13,26 +18,159 @@ const findDimension = (ratio: number, width?: number, height?: number) => {
     throw new Error("Either width or height must be provided");
 }
 
+const DimensionsBasedOnWidth = ( ratio: number, inputWidth: number ) => {
+    return { width: inputWidth, height: inputWidth / ratio }
+}
+
+
 const convertToDecimal = (numerator: number, denominator: number) => {
     return numerator / denominator;
-  };
+};
+
+// components
+
+interface ImageCropCanvasComponentProps {
+imageString: string,
+CanvasWidth: number,
+//CanvasHeight: number,
+aspectRatio: number, // aspect ratio in array format. e.g. [16,9] 
+
+
+
+}
+
+const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imageString, CanvasWidth, aspectRatio}) => {
+
+    const canvasRef = useRef<HTMLCanvasElement>(null); // Main canvas element
+    const [imageBeingEdited, setImageBeingEdited] = useState<HTMLImageElement | null>(null)
+    const [startTouchPos, setStartTouchPos] = useState<Coordinate2D | null>(null);
+    const [yOffset, setYOffset] = useState<Coordinate2D>([0,0])
+
+    const [imageTransform, setImageTransform] = useState({ 
+        xPos: 10,
+        yPos: 500,
+        scale: 1,
+        rotation: 0,
+    })
+
+    const [CanvasResizeState, setCanvasResizeState] = useState({ // the canvas dimentions based on ratio 
+        width: CanvasWidth,
+        height: 100,
+    })
+
+    useEffect(() => { // draw the image
+        if(!imageBeingEdited) return;
+        const cropCanvas = canvasRef.current;
+        if(!cropCanvas) return;
+        const cropCanvasContext = cropCanvas.getContext('2d');
+        if(!cropCanvasContext) return;
+        
+        const imageDims: Coordinate2D = [imageBeingEdited.width, imageBeingEdited.height];
+        const canvasDims: Coordinate2D = [cropCanvas.width, cropCanvas.height];
+
+        const [sx, sy, sw, sh] = [
+            0,0, imageDims[0], imageDims[1]
+          ];
+
+        const [dx, dy, dw, dh] = [imageTransform.xPos, imageTransform.yPos, imageDims[0], imageDims[1]];
+
+        cropCanvasContext.clearRect(0, 0, canvasDims[0], canvasDims[1])
+        cropCanvasContext.drawImage(imageBeingEdited, sx, sy, sw, sh, dx, dy, dw, dh);
+        
+    }, [imageBeingEdited, CanvasResizeState.height, imageTransform])
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        
+        const touchPos: Coordinate2D = [e.touches[0].clientX, e.touches[0].clientY]
+        
+        console.log(touchPos)
+        setYOffset([touchPos[0] - imageTransform.xPos, touchPos[1] - imageTransform.yPos])
+
+    }
+
+    const handleMove = (e: React.TouchEvent) => {
+        if(!imageBeingEdited) return;
+        const canvas = canvasRef.current;
+        if(!canvas) return;
+        
+
+        if (e.touches.length === 1) {
+            const touchPos: Coordinate2D = [e.touches[0].clientX, e.touches[0].clientY]
+                const posX = touchPos[0] - yOffset[0]
+                const posY = touchPos[1] - yOffset[1]
+                
+                setImageTransform(prevState => ({
+                    ...prevState,
+                    xPos: posX ,
+                    yPos: posY
+
+                }))
+                
+                
+            
+            
+            
+        }
+
+    }
+
+    useEffect(()=>{ // sets the image being edited 
+        if(!imageString) return;
+
+        const img = new Image();
+        img.src = imageString;
+        img.onload = () => {
+            setImageBeingEdited(img);
+        }
+    }, [])
+
+    useEffect(() => { // change image size when aspect ratio is changed
+        const newCanvasHeight = DimensionsBasedOnWidth(aspectRatio, CanvasResizeState.width);
+
+        setCanvasResizeState(prevState => ({
+            ...prevState,
+            height: newCanvasHeight.height
+        }))
+
+    }, [aspectRatio])
+
+
+return (
+    
+    <canvas 
+    ref={canvasRef}
+    width={`${CanvasResizeState.width}px`} 
+    height={`${CanvasResizeState.height}px`} 
+    style={{width: "100%", height: "auto"}}
+    onTouchMove={e => handleMove(e)}
+    onTouchStart={handleTouchStart}
+    ></canvas>
+
+
+
+)
+
+}
 
 interface ImageCropComponentProps {
-image: string, //the image being cropped
-isFixedAspectRatio: boolean, // does the miniapp have a fixed aspect ratio/ratios. if not, allow size adjustment
+image?: string, //the image being cropped
+isFixedAspectRatio?: boolean, // does the miniapp have a fixed aspect ratio/ratios. if not, allow size adjustment
 AspectRatio: [number, number][], // The fix aspect ratio(s) that the post can use. index 0 is default (note - isFixedAspectRatio can still be false - the size can be adjusted, but presets are avaiable in the menu)
+maxWidthPixels?: number,
 fillCropArea: boolean,
 maximumRatio: number,
 minimumRatio: number,
 onUpdate: (image: string) => void;
 }
 
-const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAspectRatio, AspectRatio, fillCropArea,maximumRatio, minimumRatio, onUpdate }) => {
+const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTestImage, isFixedAspectRatio = false, AspectRatio,maxWidthPixels = 1280, fillCropArea,maximumRatio, minimumRatio, onUpdate }) => {
     
     const [maxHeight, setMaxHeight] = useState(300);
     const [verticleAdjustment, setVerticleAdjustment] = useState(false);
     const [selectedRatio, setSelectedRatio] = useState<number | null>(null); // the selected ratio preset. null if no current preset
     
+    const canvasRef = useRef<HTMLCanvasElement>(null); // Main canvas element
+
     const [decimals, setDecimals] = useState<number[]>(
         AspectRatio.map(([numerator, denominator]) =>
           convertToDecimal(numerator, denominator)
@@ -47,12 +185,14 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
     const [resizeState, setResizeState] = useState({ 
         width: 300,
         height: 300,
+        canvasWidth: 1280,
+        canvasHeight: 1280,
         aspectRatio: 1, // current aspect ratio of the post
         thresholdCrossed: false, // the threshold where resizing changes from height to width so it fits on the page
         widthOnClick: 0, // stores the width of the crop window on click. used to resize crop window when width is above threshold
         clickOffset: 0, // the distance mouse is from the bottom of the frame
     })
-    
+
     const ResizeDragBounds = useRef<HTMLDivElement>(null);
 
     const setWidthHeight = (_width: number, _height: number) => { // sets the width and height of the crop window
@@ -67,31 +207,33 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
         }))
     }
 
+    const setCanvasWidthHeight = (_width: number, _height: number) => { // sets the width and height of the canvas
+        
+        setResizeState(prevState => ({
+            ...prevState,
+            canvasWidth: _width,
+            canvasHeight: _height
+        }))
+    }
+
     const adjustDimensionsBasedOnRatio = ( ratio: number, maxDimension: number ) => {
         const { width, height } = (ratio >= 1)
         ? { width: maxDimension, height: maxDimension / ratio }
         : { width: maxDimension * ratio, height: maxDimension };
 
-        setWidthHeight(width, height);
+        return {width, height}
     }
+
+    
 
     const adjustDimensionsOnResize = () => {
         const currentAspectRatio = resizeState.aspectRatio;
         const maxDimension = ResizeDragBounds.current!.offsetWidth;
         
+        const size = adjustDimensionsBasedOnRatio(currentAspectRatio, maxDimension);
 
-
-        // Adjust width and height based on current aspect ratio
-        if (currentAspectRatio >= 1) {
-            const newWidth = maxDimension;
-            const newHeight = maxDimension / currentAspectRatio;
-            setWidthHeight(newWidth, newHeight);
-        } else {
-            const newWidth = maxDimension * currentAspectRatio;
-            const newHeight = maxDimension;
-            setWidthHeight(newWidth, newHeight);
-        }
-        
+        setWidthHeight(size.width, size.height);
+      
     };
 
     useLayoutEffect(() => {
@@ -107,7 +249,12 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
 
         setMaxHeight(ResizeDragBounds.current.offsetWidth); 
 
-        adjustDimensionsBasedOnRatio( AspectRatio[0][0]/AspectRatio[0][1], ResizeDragBounds.current.offsetWidth )
+        const size = adjustDimensionsBasedOnRatio( AspectRatio[0][0]/AspectRatio[0][1], ResizeDragBounds.current.offsetWidth )
+        setWidthHeight(size.width, size.height);
+
+        // const canvasSize = DimensionsBasedOnWidth(AspectRatio[0][0]/AspectRatio[0][1], maxWidthPixels);
+        // setCanvasWidthHeight(canvasSize.width, canvasSize.height)
+
 
     }, [])
 
@@ -209,6 +356,9 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
                 })
                 
                 handleThresholdCrossing(yOffset, e.clientY);
+
+                // const canvasSize = DimensionsBasedOnWidth(resizeState.aspectRatio, maxWidthPixels)
+                // setCanvasWidthHeight(canvasSize.width, canvasSize.height)
             }
             
         }
@@ -254,7 +404,11 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
     )
 
     const handleRatioSelect = (ratio: number) => {
-        adjustDimensionsBasedOnRatio(ratio, maxHeight);
+        const size = adjustDimensionsBasedOnRatio(ratio, maxHeight);
+        setWidthHeight(size.width, size.height);
+        // const canvasSize = DimensionsBasedOnWidth(ratio, maxWidthPixels);
+        // setCanvasWidthHeight(canvasSize.width, canvasSize.height)
+        
         setSelectedRatio(ratio)
         
     }
@@ -276,18 +430,22 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image, isFixedAs
             }}
             >
                 <div
-                className={'border-solid border-2 border-seam-gray-subtitle'}
+                className={'border-seam-gray-subtitle items-center'}
                 style={{
                     width: resizeState.width,
                     height: resizeState.height,
-                    overflow: "auto",
+                    overflow: "hidden",
                     margin: "0 auto",
                     backgroundColor: "aliceblue",
                     borderRadius: "5px",
                     
+                    position: "relative",
+                    display: 'flex',
                 }}
                 >
                     {/* canvas element */}
+                    
+                    <ImageCropCanvasComponent imageString={image} CanvasWidth={resizeState.canvasWidth} aspectRatio={resizeState.aspectRatio}></ImageCropCanvasComponent>
                 </div>
             </div>
             
