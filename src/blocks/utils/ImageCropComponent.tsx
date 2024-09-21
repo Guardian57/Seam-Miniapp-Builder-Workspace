@@ -131,6 +131,12 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
         }
     }, [])
 
+    useEffect(() => {
+        
+        handleTouchEnd();
+
+    }, [canvasRef])
+
     useEffect(() => { // change image size when aspect ratio is changed
         const newCanvasHeight = DimensionsBasedOnWidth(aspectRatio, CanvasResizeState.width);
 
