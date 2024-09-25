@@ -1,7 +1,8 @@
-import { Height } from '@mui/icons-material';
+import { Height, Scale } from '@mui/icons-material';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import subwayTestImage from "../assets/Parallax/SubwayCar_02_Front.png";
 import SeamSaveButton from '../../components/SeamSaveButton';
+import { distance } from 'framer-motion';
 
 type Coordinate2D = [number, number];
 
@@ -23,10 +24,13 @@ const DimensionsBasedOnWidth = ( ratio: number, inputWidth: number ) => {
     return { width: inputWidth, height: inputWidth / ratio }
 }
 
-
 const convertToDecimal = (numerator: number, denominator: number) => {
     return numerator / denominator;
 };
+
+const DistanceBetweenCoordinates = (coor1: Coordinate2D, coor2: Coordinate2D) : number => {
+    return Math.sqrt(Math.pow((coor2[0] - coor1[0]), 2) + Math.pow((coor2[1] - coor1[1]), 2));
+}
 
 // components
 
@@ -45,11 +49,15 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
     const canvasRef = useRef<HTMLCanvasElement>(null); // Main canvas element
     const [imageBeingEdited, setImageBeingEdited] = useState<HTMLImageElement | null>(null)
     const [startTouchPos, setStartTouchPos] = useState<Coordinate2D | null>(null);
-    const [yOffset, setYOffset] = useState<Coordinate2D>([0,0])
+    // const [yOffset, setYOffset] = useState<Coordinate2D>([0,0])
+    const [startScaleDistance, setStartScaleDistance] = useState<number | null>(null);
+    const [startAngle, setStartAngle] = useState<number>(0)
+    const [transformOrigin, setTransformOrigin] = useState<Coordinate2D>([1119,746])
+    const [divScaleFactor, setDivScaleFactor] = useState<number>(1)
 
     const [imageTransform, setImageTransform] = useState({ 
-        xPos: 10,
-        yPos: 500,
+        xPos: 0,
+        yPos: 0,
         scale: 1,
         rotation: 0,
     })
@@ -58,6 +66,22 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
         width: CanvasWidth,
         height: 100,
     })
+
+    const getImageToDivScaleFactor = (Ref: any, width: number, height: number)=> {
+        
+        const containerDim = Ref.getBoundingClientRect().width
+        return width / containerDim
+    }
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if(!canvas) return;
+        const scaleFactor = getImageToDivScaleFactor(canvas, CanvasResizeState.width, CanvasResizeState.height) // Scale factor between the canvas dimensions and the containing div dimensions. Used to move the image within the canvas at the same rate as the touch location
+
+        setDivScaleFactor(scaleFactor)
+
+
+    }, [CanvasResizeState])
 
     useEffect(() => { // draw the image
         if(!imageBeingEdited) return;
@@ -73,25 +97,72 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
             0,0, imageDims[0], imageDims[1]
           ];
 
-        const [dx, dy, dw, dh] = [imageTransform.xPos, imageTransform.yPos, imageDims[0], imageDims[1]];
-
+        const [dx, dy, dw, dh] = [0, 0, imageDims[0], imageDims[1]];
+        
+        
         cropCanvasContext.clearRect(0, 0, canvasDims[0], canvasDims[1])
         
         cropCanvasContext.fillStyle = "aliceblue"
         cropCanvasContext.fillRect(0, 0, canvasDims[0], canvasDims[1])
         
+        
+        
+        
+        cropCanvasContext.save()
+        
+        
+        
+        
+        
+        cropCanvasContext.translate(imageTransform.xPos, imageTransform.yPos)
+        
+        //cropCanvasContext.scale(imageTransform.scale, imageTransform.scale)
+        
+        
+        cropCanvasContext.rotate(imageTransform.rotation)
+        
+        cropCanvasContext.translate(-imageDims[0]/2, -imageDims[1]/2)
+
         cropCanvasContext.drawImage(imageBeingEdited, sx, sy, sw, sh, dx, dy, dw, dh);
         
-    }, [imageBeingEdited, CanvasResizeState.height, imageTransform])
+        
+        cropCanvasContext.restore()
+        cropCanvasContext.resetTransform()
+        cropCanvasContext.fillStyle = "red"
+        cropCanvasContext.fillRect(transformOrigin[0] , transformOrigin[1] , 100, 100)
+        
+        
+        
+    }, [imageBeingEdited, CanvasResizeState.height, imageTransform, transformOrigin])
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        
-        const touchPos: Coordinate2D = [e.touches[0].clientX, e.touches[0].clientY]
-        
-        console.log(touchPos)
-        setYOffset([touchPos[0] - imageTransform.xPos, touchPos[1] - imageTransform.yPos])
+        const element = e.target as HTMLElement
+        const boundingRect = element.getBoundingClientRect()
+
+        if(e.touches.length === 4){
+            const touchPos: Coordinate2D = [e.touches[0].clientX-boundingRect.left, e.touches[0].clientY-boundingRect.top]
+            
+            
+            
+            console.log(e.target)
+            // setYOffset([touchPos[0] - imageTransform.xPos, touchPos[1] - imageTransform.yPos])
+            setStartTouchPos(touchPos)
+        } else if (e.touches.length === 2) {
+            const touchPos1: Coordinate2D = [e.touches[0].clientX-boundingRect.left, e.touches[0].clientY-boundingRect.top]
+            const touchPos2: Coordinate2D = [e.touches[1].clientX-boundingRect.left, e.touches[1].clientY-boundingRect.top]
+
+            const midPoint: Coordinate2D = [((touchPos2[0]+touchPos1[0])/2) * (divScaleFactor), ((touchPos2[1]+touchPos1[1])/2)* (divScaleFactor)]
+
+            setTransformOrigin( midPoint )
+            setStartTouchPos( midPoint )
+            setStartScaleDistance(DistanceBetweenCoordinates(touchPos1, touchPos2))
+            setStartAngle(Math.atan2( touchPos2[1] - touchPos1[1], touchPos2[0] - touchPos1[0]))
+        }
+
         e.preventDefault()
     }
+
+
 
     const handleTouchEnd = () => {
         if(!canvasRef.current) return;
@@ -103,20 +174,70 @@ const ImageCropCanvasComponent: React.FC<ImageCropCanvasComponentProps> = ({imag
         if(!imageBeingEdited) return;
         const canvas = canvasRef.current;
         if(!canvas) return;
+        if(!startTouchPos) return;
         
+        const elementRect = canvas.getBoundingClientRect();
 
-        if (e.touches.length === 1) {
-            const touchPos: Coordinate2D = [e.touches[0].clientX, e.touches[0].clientY]
-                const posX = touchPos[0] - yOffset[0]
-                const posY = touchPos[1] - yOffset[1]
+        const scaleFactor = getImageToDivScaleFactor(canvasRef.current, CanvasResizeState.width, CanvasResizeState.height) // Scale factor between the canvas dimensions and the containing div dimensions. Used to move the image within the canvas at the same rate as the touch location
+
+        setDivScaleFactor(scaleFactor)
+
+        if (e.touches.length === 4) {
+            
+            
+            
+            const touchPos: Coordinate2D = [e.touches[0].clientX - elementRect.left, e.touches[0].clientY - elementRect.top] // the position of the touch within the containing div. note: this is different from the canvas coordinates because the canvas can be greater or large than the containing div
+
+                
+                console.log(touchPos[0], touchPos[1])
+                //current touch poisition is subtracted from the starting touch position, witch gives the distance traveled. Multiplied by the scale factor to convert to canvas coordinates.
+                const posX = (touchPos[0] - startTouchPos[0]) * scaleFactor
+                const posY = (touchPos[1] - startTouchPos[1]) * scaleFactor
                 
                 setImageTransform(prevState => ({
                     ...prevState,
-                    xPos: posX ,
-                    yPos: posY
+                    
+                    // distance moved is added to the previous poisiton to move image relative to its starting position
+                    xPos: prevState.xPos + posX,
+                    yPos: prevState.yPos + posY
 
                 }))
+
+                setStartTouchPos(touchPos)
                 
+        }
+
+        if(e.touches.length === 2) {
+            if(!startScaleDistance) return;
+            const touchPos1: Coordinate2D = [e.touches[0].clientX - elementRect.left, e.touches[0].clientY - elementRect.top]
+            const touchPos2: Coordinate2D = [e.touches[1].clientX - elementRect.left, e.touches[1].clientY - elementRect.top]
+
+            const distanceBetween = DistanceBetweenCoordinates(touchPos1, touchPos2)
+
+            const scale = (distanceBetween - startScaleDistance)/150
+
+            const CurrentAngle = Math.atan2( touchPos2[1] - touchPos1[1], touchPos2[0] - touchPos1[0] )
+
+            const angle = CurrentAngle - startAngle
+            
+            const midPoint: Coordinate2D = [((touchPos2[0]+touchPos1[0])/2) * (divScaleFactor), ((touchPos2[1]+touchPos1[1])/2)* (divScaleFactor)]
+
+            setTransformOrigin(midPoint)
+
+            const posX = (midPoint[0] - startTouchPos[0])
+            const posY = (midPoint[1] - startTouchPos[1])  
+            
+            setImageTransform(prevState => ({
+                ...prevState,
+                xPos: prevState.xPos + posX,
+                yPos: prevState.yPos + posY,
+                scale : prevState.scale + scale,
+                rotation: prevState.rotation + angle
+
+            }))
+            setStartTouchPos(midPoint)
+            setStartScaleDistance(distanceBetween)
+            setStartAngle(CurrentAngle)
         }
 
     }
@@ -159,8 +280,6 @@ return (
     onTouchStart={handleTouchStart}
     onTouchEnd={handleTouchEnd}
     ></canvas>
-
-
 
 )
 
@@ -508,7 +627,7 @@ const ImageCropComponent: React.FC<ImageCropComponentProps> = ({image=subwayTest
 
             <SeamSaveButton onClick={() => finalCanvas && extractImage(finalCanvas)}/>
 
-            <img style={{marginTop: "15px"}}src={finalImage?.src}/>
+            <img style={{marginTop: "15px", userSelect:"element"}}src={finalImage?.src}/>
         </div>
 
     )
